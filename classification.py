@@ -2,10 +2,10 @@ import sys
 import time
 import multiprocessing
 
-from mylibs.datamodel import CData
-from mylibs.thinkster.Architecture.NNModel import Network
-from mylibs.thinkster.Utility.cost import *
-from mylibs.thinkster.Utility.activations import *
+from csxnet.datamodel import CData
+from csxnet.brainforge.Architecture.NNModel import Network
+from csxnet.brainforge.Utility.cost import *
+from csxnet.brainforge.Utility.activations import *
 
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
