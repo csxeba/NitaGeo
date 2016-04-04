@@ -30,8 +30,8 @@ batch_size = 20
 def wgs_to_distance(coords1: np.ndarray, coords2: np.ndarray):
     import math
     R = 6378.137  # radius of the Earth in kms
-    dY = coords1[0] - coords2[0] * math.pi / 180
-    dX = coords1[1] - coords2[1] * math.pi / 180
+    dY = coords1[..., 0] - coords2[..., 0] * math.pi / 180
+    dX = coords1[..., 1] - coords2[..., 1] * math.pi / 180
     a = (np.sin(dY/2)**2) \
         + np.cos(coords1[0] * math.pi / 180) \
         * np.cos(coords1[1] * math.pi / 180) \
