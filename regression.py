@@ -18,16 +18,16 @@ what = "fcv"
 crossvalrate = 0.3
 pca = 10  # full = 13
 
-eta = 0.5
+eta = 0.2
 lmdb = 0.0
-hiddens = (30,)
-activationH = Tanh
+hiddens = (150, 40)
+activationH = Sigmoid
 activationO = Sigmoid
 cost = MSE
 
 runs = 1
-epochs = 100000
-batch_size = 20
+epochs = 20000
+batch_size = 15
 
 logchain = ""
 
@@ -41,6 +41,16 @@ def wgs_test(net: Network, on):
     preds = d.upscale(net.predict(questions))
     distance = haversine(ideps, preds)
     return int(np.mean(distance))
+
+
+def dump_wgs_prediction(net: Network, on):
+    m = net.data.n_testing
+    d = net.data
+    questions = {"d": d.data[:m], "l": d.learning[:m], "t": d.testing}[on[0]]
+    ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
+    preds = d.upscale(net.predict(questions))
+    np.savetxt(on + '_ideps.txt', ideps, delimiter="\t")
+    np.savetxt(on + '_preds.txt', preds, delimiter="\t")
 
 
 def pull_data(filename):
@@ -60,10 +70,18 @@ def build_network(data):
 
 
 def run():
-    global logchain, results
+    global logchain, results, eta
     path = fcvpath if "fcv" in what.lower() else burleypath
     myData = pull_data(path)
     network = build_network(myData)
+
+    print("Autoencoding...")
+    network.eta = eta / 2
+    for e in range(1, 10001):
+        network.autoencode(batch_size)
+        if e % 1000 == 0:
+            print("error @ {}:".format(e), network.error)
+    network.eta = eta
 
     for e in range(1, epochs + 1):
         epochlog = ""
@@ -73,7 +91,7 @@ def run():
             lerr = wgs_test(network, "learning")
             results[0].append(terr)
             results[1].append(lerr)
-            if e % 10000 == 0:
+            if e % 1000 == 0:
                 epochlog += "Epochs {}\n".format(e) \
                           + "TErr: {} kms\n".format(terr) \
                           + "LErr: {} kms\n".format(lerr)
@@ -83,6 +101,9 @@ def run():
         logchain += epochlog
 
     logchain += "Run took {} seconds!\n".format(time.time() - start)
+
+    dump_wgs_prediction(network, "learning")
+    dump_wgs_prediction(network, "testing")
 
 
 if __name__ == '__main__':
@@ -106,7 +127,7 @@ if __name__ == '__main__':
     log.close()
 
     # Plot the learning dynamics
-    X = np.arange((len(results[0])//100))[:-1] * 100
+    X = np.arange(len(results[0])) * 100
     plt.plot(X, results[1], "r", label="learning")
     plt.plot(X, results[0], "b", label="testing")
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
