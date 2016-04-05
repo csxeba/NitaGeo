@@ -12,31 +12,22 @@ from csxnet.brainforge.Utility.activations import *
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
 burleypath = "burleynyers.csv"
+fullpath = "fullnyers"
 
 what = "fcv"
 
-crossvalrate = 0.3
-pca = 10  # full = 13
-
-eta = 0.2
-lmdb = 0.0
-hiddens = (150, 40)
-activationH = Sigmoid
-activationO = Sigmoid
-cost = MSE
-
-runs = 1
-epochs = 20000
-batch_size = 15
-
 logchain = ""
+
+crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size = \
+    0.2,      10,  0.01, 0.0, (300,),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers
+#   0.3,      10,  0.2, 0.0,  (100, 30), Sigmoid,     Sigmoid,     MSE,  20000,  20  # Burley Hypers
 
 
 def wgs_test(net: Network, on):
-    from csxnet.utilities import haversine
+    from csxnet.nputils import haversine
     m = net.data.n_testing
     d = net.data
-    questions = {"d": d.data[:m], "l": d.learning[:m], "t": d.testing}[on[0]]
+    questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
     ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
     preds = d.upscale(net.predict(questions))
     distance = haversine(ideps, preds)
@@ -49,8 +40,8 @@ def dump_wgs_prediction(net: Network, on):
     questions = {"d": d.data[:m], "l": d.learning[:m], "t": d.testing}[on[0]]
     ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
     preds = d.upscale(net.predict(questions))
-    np.savetxt(on + '_ideps.txt', ideps, delimiter="\t")
-    np.savetxt(on + '_preds.txt', preds, delimiter="\t")
+    np.savetxt("logs/" + on + '_ideps.txt', ideps, delimiter="\t")
+    np.savetxt("logs/" + on + '_preds.txt', preds, delimiter="\t")
 
 
 def pull_data(filename):
@@ -61,7 +52,7 @@ def pull_data(filename):
 
 
 def build_network(data):
-    net = Network(data=data, eta=eta, lmbd=lmdb, cost=cost)
+    net = Network(data=data, eta=eta, lmbd=lmbd, cost=cost)
     for hl in hiddens:
         net.add_fc(hl, activation=activationH)
 
@@ -70,41 +61,44 @@ def build_network(data):
 
 
 def run():
+
+    runlog = ""
+
+    def autoencode():
+        print("Autoencoding...")
+        network.eta = eta / 2
+        for ep in range(1, 10001):
+            network.autoencode(batch_size)
+            if ep % 1000 == 0:
+                print("error @ {}:".format(ep), network.error)
+        network.eta = eta
+
     global logchain, results, eta
     path = fcvpath if "fcv" in what.lower() else burleypath
     myData = pull_data(path)
     network = build_network(myData)
 
-    print("Autoencoding...")
-    network.eta = eta / 2
-    for e in range(1, 10001):
-        network.autoencode(batch_size)
-        if e % 1000 == 0:
-            print("error @ {}:".format(e), network.error)
-    network.eta = eta
+    # autoencode()
 
     for e in range(1, epochs + 1):
         epochlog = ""
         network.learn(batch_size=batch_size)
-        if e % 100 == 0 and e != 0:
+        if e % 50 == 0 and e != 0:
             terr = wgs_test(network, "testing")
             lerr = wgs_test(network, "learning")
             results[0].append(terr)
             results[1].append(lerr)
             if e % 1000 == 0:
-                epochlog += "Epochs {}\n".format(e) \
+                epochlog += "Epochs {}, eta: {}\n".format(e, round(network.eta, 2)) \
                           + "TErr: {} kms\n".format(terr) \
                           + "LErr: {} kms\n".format(lerr)
                 print(epochlog)
-        if e % 10000 == 0 and network.eta < 3.0:
-            network.eta += 0.1
-        logchain += epochlog
-
-    logchain += "Run took {} seconds!\n".format(time.time() - start)
+        runlog += epochlog
 
     dump_wgs_prediction(network, "learning")
     dump_wgs_prediction(network, "testing")
 
+    return runlog
 
 if __name__ == '__main__':
 
@@ -112,17 +106,16 @@ if __name__ == '__main__':
 
     start = time.time()
 
-    # Run the network until all epochs done or until keyboard-interrupt
-    try:
-        run()
-    except KeyboardInterrupt:
-        pass
+    logchain = run()
+    timestr = "Run took {} seconds!\n".format(time.time() - start)
+    logchain += timestr
+    print(timestr)
 
-    # Print the log
-    print(logchain, end="")
+    logchain += "Hypers: crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size\n"
+    logchain += str((crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size)) + "\n"
 
     # Write the log to file
-    log = open("log.txt", "w")
+    log = open("logs/log.txt", "w")
     log.write(logchain)
     log.close()
 

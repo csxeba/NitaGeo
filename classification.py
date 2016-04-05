@@ -1,6 +1,5 @@
 import sys
 import time
-import multiprocessing
 
 from csxnet.datamodel import CData
 from csxnet.brainforge.Architecture.NNModel import Network
@@ -21,7 +20,7 @@ lmdb = .1
 hiddens = (60, 60)
 cost = Xent
 
-runs = 10
+runs = 50
 epochs = 500
 batch_size = 15
 
@@ -56,9 +55,9 @@ if __name__ == '__main__':
             net.learn(batch_size=batch_size)
         results[0].append(net.evaluate("testing"))
         results[1].append(net.evaluate("learning"))
-        # if r % 10 == 0:
-        #     print("{} runs done! Avg TAcc: {} Avg LAcc: {}"
-        #           .format(r, sum(results[0])/r, sum(results[1])/r))
+        if r % 10 == 0:
+            print("{} runs done! Avg TAcc: {} Avg LAcc: {}"
+                  .format(r, sum(results[0])/r, sum(results[1])/r))
 
     print(what, "T:", sum(results[0])/runs)
     print(what, "L:", sum(results[1])/runs)
