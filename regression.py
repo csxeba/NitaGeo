@@ -19,7 +19,7 @@ what = "fcv"
 logchain = ""
 
 crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size = \
-    0.2,      10,  0.01, 0.0, (300,),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers
+    0.2,      10,  0.1, 0.0, (120, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers
 #   0.3,      10,  0.2, 0.0,  (100, 30), Sigmoid,     Sigmoid,     MSE,  20000,  20  # Burley Hypers
 
 
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     log.close()
 
     # Plot the learning dynamics
-    X = np.arange(len(results[0])) * 100
+    X = np.arange(len(results[0])) * 50
     plt.plot(X, results[1], "r", label="learning")
     plt.plot(X, results[0], "b", label="testing")
     plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
