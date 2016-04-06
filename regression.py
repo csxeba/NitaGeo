@@ -16,11 +16,13 @@ fullpath = "fullnyers"
 
 what = "fcv"
 
-logchain = ""
+jobs = 2
 
 crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size = \
-    0.2,      10,  0.1, 0.0, (120, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers
-#   0.3,      10,  0.2, 0.0,  (100, 30), Sigmoid,     Sigmoid,     MSE,  20000,  20  # Burley Hypers
+    0.3,      10,  0.3, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,   20  # FCV Hypers in use
+#   0.3,      10,  0.3, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,   20  # FCV Hypers, 1st best so far
+#   0.2,      10,  0.2, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 2nd best so far
+#   0.3,      10,  0.2, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # Burley Hypers
 
 
 def wgs_test(net: Network, on):
@@ -34,14 +36,14 @@ def wgs_test(net: Network, on):
     return int(np.mean(distance))
 
 
-def dump_wgs_prediction(net: Network, on):
+def dump_wgs_prediction(net: Network, on, ID):
     m = net.data.n_testing
     d = net.data
-    questions = {"d": d.data[:m], "l": d.learning[:m], "t": d.testing}[on[0]]
+    questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
     ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
     preds = d.upscale(net.predict(questions))
-    np.savetxt("logs/" + on + '_ideps.txt', ideps, delimiter="\t")
-    np.savetxt("logs/" + on + '_preds.txt', preds, delimiter="\t")
+    np.savetxt("logs/R" + str(ID) + on + '_ideps.txt', ideps, delimiter="\t")
+    np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
 
 
 def pull_data(filename):
@@ -60,20 +62,12 @@ def build_network(data):
     return net
 
 
-def run():
+def run(queue=None, ID=0):
 
+    print("P{} starting...".format(ID))
     runlog = ""
 
-    def autoencode():
-        print("Autoencoding...")
-        network.eta = eta / 2
-        for ep in range(1, 10001):
-            network.autoencode(batch_size)
-            if ep % 1000 == 0:
-                print("error @ {}:".format(ep), network.error)
-        network.eta = eta
-
-    global logchain, results, eta
+    res = [list(), list()]
     path = fcvpath if "fcv" in what.lower() else burleypath
     myData = pull_data(path)
     network = build_network(myData)
@@ -86,44 +80,65 @@ def run():
         if e % 50 == 0 and e != 0:
             terr = wgs_test(network, "testing")
             lerr = wgs_test(network, "learning")
-            results[0].append(terr)
-            results[1].append(lerr)
+            res[0].append(terr)
+            res[1].append(lerr)
             if e % 1000 == 0:
-                epochlog += "Epochs {}, eta: {}\n".format(e, round(network.eta, 2)) \
+                epochlog += "P{}: epochs {}, eta: {}\n".format(ID, e, round(network.eta, 2)) \
                           + "TErr: {} kms\n".format(terr) \
                           + "LErr: {} kms\n".format(lerr)
-                print(epochlog)
+                if e % 1000 == 0:
+                    print(epochlog)
         runlog += epochlog
 
-    dump_wgs_prediction(network, "learning")
-    dump_wgs_prediction(network, "testing")
+    dump_wgs_prediction(network, "learning", ID)
+    dump_wgs_prediction(network, "testing", ID)
 
-    return runlog
+    if queue:
+        queue.put((runlog, res, ID))
+    else:
+        return runlog, res, ID
 
-if __name__ == '__main__':
 
-    results = [list(), list()]  # Save the start unix epoch
+def mp_experiment():
+    import multiprocessing as mp
 
     start = time.time()
 
-    logchain = run()
+    myQueue = mp.Queue()
+    jbs = jobs if jobs else mp.cpu_count()
+    procs = [mp.Process(target=run, args=(myQueue, i), name=str("P{}".format(i))) for i in range(jbs)]
+    results = []
+    for proc in procs:
+        proc.start()
+    while len(results) != jbs:
+        results.append(myQueue.get())
+        time.sleep(0.1)
+    for proc in procs:
+        proc.join()
+
     timestr = "Run took {} seconds!\n".format(time.time() - start)
-    logchain += timestr
-    print(timestr)
 
-    logchain += "Hypers: crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size\n"
-    logchain += str((crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size)) + "\n"
+    X = np.arange(epochs // 50) * 50
+    f, axarr = plt.subplots(jbs, sharex=True)
+    for i, (log, acc, ID) in enumerate(results):
+        logf = open("logs/{}log.txt".format(ID), "w")
+        logf.write(log + timestr + "\n")
+        logf.close()
+        print("\n", timestr)
 
-    # Write the log to file
-    log = open("logs/log.txt", "w")
-    log.write(logchain)
-    log.close()
+        axarr[i].plot(X, acc[0], "r", label="T")
+        axarr[i].plot(X, acc[1], "b", label="L")
+        axarr[i].set_title("P{}".format(ID))
+        axarr[i].axis([0, X.max(), 0.0, 5000.0])
+        if i == 0:
+            axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                            ncol=2, mode="expand", borderaxespad=0.)
 
-    # Plot the learning dynamics
-    X = np.arange(len(results[0])) * 50
-    plt.plot(X, results[1], "r", label="learning")
-    plt.plot(X, results[0], "b", label="testing")
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=2, mode="expand", borderaxespad=0.)
+    # plt.plot(X, results[1], "r", label="learning")
+    # plt.plot(X, results[0], "b", label="testing")
+    # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #            ncol=2, mode="expand", borderaxespad=0.)
     plt.show()
 
+if __name__ == '__main__':
+    mp_experiment()

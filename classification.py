@@ -12,17 +12,17 @@ burleypath = "burleynyers.csv"
 
 what = "fcv"
 
-crossvalrate = 0.5
-pca = 13  # full = 13
+crossvalrate = 0.3
+pca = 11  # full = 13
 
-eta = .8
-lmdb = .1
+eta = 2.0
+lmdb = .0
 hiddens = (60, 60)
-cost = Xent
+cost = MSE
 
-runs = 50
-epochs = 500
-batch_size = 15
+runs = 100
+epochs = 300
+batch_size = 10
 
 
 def pull_data(filename):
@@ -30,6 +30,18 @@ def pull_data(filename):
     questions = d._datacopy[..., 2:]
     targets = d.indeps
     return CData((questions, targets), cross_val=crossvalrate, pca=pca)
+
+
+def dump_predictions(network: Network, on, ID):
+    m = network.data.n_testing
+    d = network.data
+    questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
+    ideps = {"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m]
+    preds = network.predict(questions)
+    answers = d.translate(preds, dummy=True)
+    out = np.vstack((ideps, answers)).T
+
+    np.savetxt("logs/C" + str(ID) + on + ".txt", out, delimiter="\t", header="IDEPS, ANSWERS", fmt="%s")
 
 
 def build_network(data):
@@ -47,18 +59,41 @@ if __name__ == '__main__':
     start = time.time()
     path = fcvpath if "fcv" in what.lower() else burleypath
     results = [list(), list()]
+    curve = [[list(), list()] for _ in range(3)]
     myData = pull_data(path)
-    net = build_network(myData)
 
     for r in range(1, runs+1):
-        for __ in range(epochs):
-            net.learn(batch_size=batch_size)
-        results[0].append(net.evaluate("testing"))
-        results[1].append(net.evaluate("learning"))
+        network = build_network(myData)
+        myData.split_data()
+        for epoch in range(epochs):
+            network.learn(batch_size=batch_size)
+            if r <= 3:
+                if epoch % (epochs // 100) == 0:
+                    curve[r-1][0].append(network.evaluate("testing"))
+                    curve[r-1][1].append(network.evaluate("learning"))
+        tfinal = network.evaluate("testing")
+        lfinal = network.evaluate("learning")
+        results[0].append(network.evaluate("testing"))
+        results[1].append(network.evaluate("learning"))
         if r % 10 == 0:
             print("{} runs done! Avg TAcc: {} Avg LAcc: {}"
-                  .format(r, sum(results[0])/r, sum(results[1])/r))
+                  .format(r, np.mean(results[0]), np.mean(results[1])))
+        if r <= 3:
+            dump_predictions(network, "testing", ID=r)
+            dump_predictions(network, "learning", ID=r)
 
-    print(what, "T:", sum(results[0])/runs)
-    print(what, "L:", sum(results[1])/runs)
+    print(what, "T:", np.mean(results[0]), "STD:", np.std(results[0]))
+    print(what, "L:", np.mean(results[1]), "STD:", np.std(results[1]))
     print("Run took {} seconds".format(int(time.time()-start)))
+
+    import matplotlib.pyplot as plt
+    X = np.arange(100) * (epochs // 100)
+    f, axarr = plt.subplots(3, sharex=True)
+    for i, acc in enumerate(curve):
+        axarr[i].plot(X, acc[0], "r", label="T")
+        axarr[i].plot(X, acc[1], "b", label="L")
+        axarr[i].axis([0, X.max(), 0.0, 1.0])
+        if i == 0:
+            axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                            ncol=2, mode="expand", borderaxespad=0.)
+    plt.show()
