@@ -19,10 +19,12 @@ what = "fcv"
 jobs = 2
 
 crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size = \
-    0.3,      10,  0.3, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,   20  # FCV Hypers in use
+    0.3,      10,  0.3, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers in use
 #   0.3,      10,  0.3, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,   20  # FCV Hypers, 1st best so far
 #   0.2,      10,  0.2, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 2nd best so far
 #   0.3,      10,  0.2, 0.0, (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # Burley Hypers
+
+runs = 1000
 
 
 def wgs_test(net: Network, on):
@@ -62,41 +64,17 @@ def build_network(data):
     return net
 
 
-def run(queue=None, ID=0):
-
-    print("P{} starting...".format(ID))
-    runlog = ""
-
-    res = [list(), list()]
+def run(queue=None):
     path = fcvpath if "fcv" in what.lower() else burleypath
     myData = pull_data(path)
     network = build_network(myData)
 
-    # autoencode()
-
     for e in range(1, epochs + 1):
-        epochlog = ""
         network.learn(batch_size=batch_size)
-        if e % 50 == 0 and e != 0:
-            terr = wgs_test(network, "testing")
-            lerr = wgs_test(network, "learning")
-            res[0].append(terr)
-            res[1].append(lerr)
-            if e % 1000 == 0:
-                epochlog += "P{}: epochs {}, eta: {}\n".format(ID, e, round(network.eta, 2)) \
-                          + "TErr: {} kms\n".format(terr) \
-                          + "LErr: {} kms\n".format(lerr)
-                if e % 1000 == 0:
-                    print(epochlog)
-        runlog += epochlog
 
-    dump_wgs_prediction(network, "learning", ID)
-    dump_wgs_prediction(network, "testing", ID)
-
-    if queue:
-        queue.put((runlog, res, ID))
-    else:
-        return runlog, res, ID
+    terr = wgs_test(network, "testing")
+    lerr = wgs_test(network, "learning")
+    queue.put((terr, lerr))
 
 
 def mp_experiment():
@@ -106,7 +84,7 @@ def mp_experiment():
 
     myQueue = mp.Queue()
     jbs = jobs if jobs else mp.cpu_count()
-    procs = [mp.Process(target=run, args=(myQueue, i), name=str("P{}".format(i))) for i in range(jbs)]
+    procs = [mp.Process(target=run, args=(myQueue,), name="P{}".format(i)) for i in range(jbs)]
     results = []
     for proc in procs:
         proc.start()
@@ -116,29 +94,51 @@ def mp_experiment():
     for proc in procs:
         proc.join()
 
-    timestr = "Run took {} seconds!\n".format(time.time() - start)
+    return list(zip(*results))
 
-    X = np.arange(epochs // 50) * 50
-    f, axarr = plt.subplots(jbs, sharex=True)
-    for i, (log, acc, ID) in enumerate(results):
-        logf = open("logs/{}log.txt".format(ID), "w")
-        logf.write(log + timestr + "\n")
-        logf.close()
-        print("\n", timestr)
+    # timestr = "Run took {} seconds!\n".format(time.time() - start)
 
-        axarr[i].plot(X, acc[0], "r", label="T")
-        axarr[i].plot(X, acc[1], "b", label="L")
-        axarr[i].set_title("P{}".format(ID))
-        axarr[i].axis([0, X.max(), 0.0, 5000.0])
-        if i == 0:
-            axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-                            ncol=2, mode="expand", borderaxespad=0.)
+    # X = np.arange(epochs // 50) * 50
+    # f, axarr = plt.subplots(jbs, sharex=True)
+    # for i, (log, acc, ID) in enumerate(results):
+    #     logf = open("logs/{}log.txt".format(ID), "w")
+    #     logf.write(log + timestr + "\n")
+    #     logf.close()
+    #     print("\n", timestr)
 
+    # axarr[i].plot(X, acc[0], "r", label="T")
+    # axarr[i].plot(X, acc[1], "b", label="L")
+    # axarr[i].set_title("P{}".format(ID))
+    # axarr[i].axis([0, X.max(), 0.0, 5000.0])
+    # if i == 0:
+    #     axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #                     ncol=2, mode="expand", borderaxespad=0.)
+    #
     # plt.plot(X, results[1], "r", label="learning")
     # plt.plot(X, results[0], "b", label="testing")
     # plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
     #            ncol=2, mode="expand", borderaxespad=0.)
-    plt.show()
+    # plt.show()
+
 
 if __name__ == '__main__':
-    mp_experiment()
+    start = time.time()
+    results = [list(), list()]
+    logchain = ""
+    for r in range(1, runs+1):
+        res = mp_experiment()
+        results[0].extend(res[0])
+        results[1].extend(res[1])
+        logchain += "Acc @ {}: T: {}\tL: {}\n".format(r, np.mean(results[0]), np.mean(results[1]))
+    logchain += "---------------\nFinal Tests:\n"
+    logchain += "L: mean: {} STD: {}\n".format(np.mean(results[0]), np.std(results[0]))
+    logchain += "T: mean: {} STD: {}\n".format(np.mean(results[1]), np.std(results[1]))
+    logchain += "Hypers: crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size:\n"
+    logchain += str([crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size]) + "\n"
+    logchain += "Run time: {}s\n".format(time.time()-start)
+
+    logf = open("logs/Rlog1000.txt", "w")
+    logf.write(logchain)
+    logf.close()
+
+    print("Fin")

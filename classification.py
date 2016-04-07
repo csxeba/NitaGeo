@@ -20,7 +20,7 @@ lmdb = .0
 hiddens = (60, 60)
 cost = MSE
 
-runs = 100
+runs = 1000
 epochs = 300
 batch_size = 10
 
@@ -32,12 +32,12 @@ def pull_data(filename):
     return CData((questions, targets), cross_val=crossvalrate, pca=pca)
 
 
-def dump_predictions(network: Network, on, ID):
-    m = network.data.n_testing
-    d = network.data
+def dump_predictions(net: Network, on, ID):
+    m = net.data.n_testing
+    d = net.data
     questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
     ideps = {"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m]
-    preds = network.predict(questions)
+    preds = net.predict(questions)
     answers = d.translate(preds, dummy=True)
     out = np.vstack((ideps, answers)).T
 
@@ -71,10 +71,11 @@ if __name__ == '__main__':
                 if epoch % (epochs // 100) == 0:
                     curve[r-1][0].append(network.evaluate("testing"))
                     curve[r-1][1].append(network.evaluate("learning"))
-        tfinal = network.evaluate("testing")
-        lfinal = network.evaluate("learning")
-        results[0].append(network.evaluate("testing"))
-        results[1].append(network.evaluate("learning"))
+        if r % (runs // 100) == 0:
+            tfinal = network.evaluate("testing")
+            lfinal = network.evaluate("learning")
+            results[0].append(network.evaluate("testing"))
+            results[1].append(network.evaluate("learning"))
         if r % 10 == 0:
             print("{} runs done! Avg TAcc: {} Avg LAcc: {}"
                   .format(r, np.mean(results[0]), np.mean(results[1])))
@@ -87,7 +88,7 @@ if __name__ == '__main__':
     print("Run took {} seconds".format(int(time.time()-start)))
 
     import matplotlib.pyplot as plt
-    X = np.arange(100) * (epochs // 100)
+    X = np.arange(100) * (epochs // 10)
     f, axarr = plt.subplots(3, sharex=True)
     for i, acc in enumerate(curve):
         axarr[i].plot(X, acc[0], "r", label="T")
