@@ -10,18 +10,18 @@ dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/d
 fcvpath = "fcvnyers.csv"
 burleypath = "burleynyers.csv"
 
-what = "fcv"
+what = "burley"
 
 crossvalrate = 0.3
 pca = 11  # full = 13
 
-eta = 2.0
+eta = 1.7
 lmdb = .0
 hiddens = (60, 60)
 cost = MSE
 
-runs = 1000
-epochs = 300
+runs = 100
+epochs = 250
 batch_size = 10
 
 
