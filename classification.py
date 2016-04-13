@@ -15,13 +15,13 @@ what = "burley"
 crossvalrate = 0.3
 pca = 11  # full = 13
 
-eta = 1.7
-lmdb = .0
-hiddens = (60, 60)
+eta = 1.5
+lmdb = 0.0
+hiddens = (100, 60)
 cost = MSE
 
-runs = 100
-epochs = 250
+runs = 1000
+epochs = 300
 batch_size = 10
 
 
@@ -71,11 +71,10 @@ if __name__ == '__main__':
                 if epoch % (epochs // 100) == 0:
                     curve[r-1][0].append(network.evaluate("testing"))
                     curve[r-1][1].append(network.evaluate("learning"))
-        if r % (runs // 100) == 0:
-            tfinal = network.evaluate("testing")
-            lfinal = network.evaluate("learning")
-            results[0].append(network.evaluate("testing"))
-            results[1].append(network.evaluate("learning"))
+        tfinal = network.evaluate("testing")
+        lfinal = network.evaluate("learning")
+        results[0].append(network.evaluate("testing"))
+        results[1].append(network.evaluate("learning"))
         if r % 10 == 0:
             print("{} runs done! Avg TAcc: {} Avg LAcc: {}"
                   .format(r, np.mean(results[0]), np.mean(results[1])))
@@ -88,7 +87,7 @@ if __name__ == '__main__':
     print("Run took {} seconds".format(int(time.time()-start)))
 
     import matplotlib.pyplot as plt
-    X = np.arange(100) * (epochs // 10)
+    X = X = np.arange(100) * (epochs // 100)
     f, axarr = plt.subplots(3, sharex=True)
     for i, acc in enumerate(curve):
         axarr[i].plot(X, acc[0], "r", label="T")

@@ -13,19 +13,20 @@ from csxnet.brainforge.Utility.activations import *
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
 burleypath = "burleynyers.csv"
-fullpath = "fullnyers"
+fullpath = "fullnyers.csv"
 
 what = "burley"
 
-crossvalrate, pca, eta, lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.3,      10,  0.3, 0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,  35  # Burley Hypers
-#   0.3,      10,  0.3, 0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
-#   0.3,      10,  0.3, 0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  5000,   20  # FCV Hypers, 2nd best so far
-#   0.2,      10,  0.2, 0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
+crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
+    0.2,      10,  0.2,  0.0,  (30, 30, 30, 30),  Sigmoid,     Sigmoid,     MSE,   6000,  30  # Burley Hypers
+#   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
+#   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
+#   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 10
+runs = 1000
 no_plotpoints = 200
 no_plots = 2
+jobs = 2
 
 
 def wgs_test(net: Network, on):
@@ -71,45 +72,46 @@ def build_network(data):
     return net
 
 
-def run1(queue=None, return_dynamics=False, dump=False, ID=0):
+def run1(queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
     """One run corresponds to the training of a network with randomized weights"""
-    path = fcvpath if "fcv" in what.lower() else burleypath
-    myData = pull_data(path)
+    print("P{}  started!".format(ID))
+    myData.split_data()
     network = build_network(myData)
     dynamics = [list(), list()]
 
     for e in range(1, epochs + 1):
         network.learn(batch_size=batch_size)
-        if return_dynamics and e % (epochs // no_plotpoints) == 0:
+        if e % (epochs // no_plotpoints) == 0:
             terr = wgs_test(network, "testing")
             lerr = wgs_test(network, "learning")
             dynamics[0].append(terr)
             dynamics[1].append(lerr)
-            if e % ((epochs // no_plotpoints) * 10) == 0:
+            if e % ((epochs // no_plotpoints) * 10) == 0 and verbose:
                 print(str(ID) + " / e: {}: T: {} L: {}".format(e, terr, lerr))
 
     output = (dynamics[0][-1], dynamics[1][-1]) if not return_dynamics else dynamics
+    print("P{} finished!".format(ID))
 
     if dump:
         dump_wgs_prediction(network, "testing", ID)
 
-    if queue and return_dynamics:
+    if queue:
         queue.put(output)
-    elif not queue and return_dynamics:
+    else:
         return output
 
 
-def mp_run(jobs=mp.cpu_count(), return_dynamics=False, dump=False):
+def mp_run(jobs=mp.cpu_count(), return_dynamics=False, dump=False, verbose=False):
     """Organizes multiple runs in parallel"""
     myQueue = mp.Queue()
-    procs = [mp.Process(target=run1, args=(myQueue, return_dynamics, dump, i),
+    procs = [mp.Process(target=run1, args=(myQueue, return_dynamics, dump, i, verbose),
                         name="P{}".format(i)) for i in range(jobs)]
     results = []
     for proc in procs:
         proc.start()
     while len(results) != jobs:
         results.append(myQueue.get())
-        time.sleep(0.1)
+        time.sleep(0.33)
     for proc in procs:
         proc.join()
 
@@ -124,20 +126,25 @@ def logged_run():
     results = [list(), list()]
     logchain = ""
     for r in range(1, runs+1):
-        res = mp_run()
+        res = mp_run(jobs=jobs, return_dynamics=False, dump=True)
         results[0].extend(res[0])
         results[1].extend(res[1])
-        logchain += "Acc @ {}: T: {}\tL: {}\n".format(r, np.mean(results[0]), np.mean(results[1]))
+        logchain += "Acc @ {}: T: {}\tL: {}\n".format(r*jobs, int(np.mean(results[0])), int(np.mean(results[1])))
+        print("Done {} runs".format(r*jobs))
+    tfin = np.mean(results[0]), np.std(results[0])
+    lfin = np.mean(results[1]), np.std(results[1])
+    print("----------\nExperiment ended.")
+    print("T: mean: {} STD: {}".format(*tfin))
+    print("L: mean: {} STD: {}".format(*lfin))
     logchain += "---------------\nFinal Tests:\n"
-    logchain += "L: mean: {} STD: {}\n".format(np.mean(results[0]), np.std(results[0]))
-    logchain += "T: mean: {} STD: {}\n".format(np.mean(results[1]), np.std(results[1]))
+    logchain += "T: mean: {} STD: {}\n".format(*tfin)
+    logchain += "L: mean: {} STD: {}\n".format(*lfin)
     logchain += "Hypers: crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size:\n"
     logchain += str([crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size]) + "\n"
     logchain += "Run time: {}s\n".format(time.time()-start)
     logf = open("logs/Rlog{}.txt".format(runs), "w")
     logf.write(logchain)
     logf.close()
-    print("Fin")
 
 
 def plotted_run():
@@ -147,7 +154,7 @@ def plotted_run():
     X = np.arange(no_plotpoints) * (epochs // no_plotpoints)
     f, axarr = plt.subplots(no_plots, sharex=True)
 
-    dynamics = mp_run(jobs=no_plots, return_dynamics=True, dump=True)
+    dynamics = mp_run(jobs=no_plots, return_dynamics=True, dump=True, verbose=True)
 
     for i in range(no_plots):
         axarr[i].plot(X, dynamics[i][0], "r", label="T")
@@ -162,5 +169,11 @@ def plotted_run():
                             ncol=2, mode="expand", borderaxespad=0.)
     plt.show()
 
+
+path = {"fcv": fcvpath, "bur": burleypath, "ful": fullpath}[what.lower()[:3]]
+myData = pull_data(path)
+
+
 if __name__ == '__main__':
     plotted_run()
+    print("Fin")
