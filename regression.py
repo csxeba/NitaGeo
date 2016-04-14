@@ -23,7 +23,7 @@ crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epoch
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
 #   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 1000
+runs = 3
 no_plotpoints = 200
 no_plots = 2
 jobs = 2
@@ -75,7 +75,8 @@ def build_network(data):
 def run1(queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
     """One run corresponds to the training of a network with randomized weights"""
     print("P{}  started!".format(ID))
-    myData.split_data()
+    path = {"fcv": fcvpath, "bur": burleypath, "ful": fullpath}[what.lower()[:3]]
+    myData = pull_data(path)
     network = build_network(myData)
     dynamics = [list(), list()]
 
@@ -170,10 +171,6 @@ def plotted_run():
     plt.show()
 
 
-path = {"fcv": fcvpath, "bur": burleypath, "ful": fullpath}[what.lower()[:3]]
-myData = pull_data(path)
-
-
 if __name__ == '__main__':
-    plotted_run()
+    logged_run()
     print("Fin")
