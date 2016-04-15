@@ -18,12 +18,12 @@ fullpath = "fullnyers.csv"
 what = "burley"
 
 crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.2,      10,  0.2,  0.0,  (30, 30, 30, 30),  Sigmoid,     Sigmoid,     MSE,   6000,  30  # Burley Hypers
+    0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
 #   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 3
+runs = 50
 no_plotpoints = 200
 no_plots = 2
 jobs = 2
@@ -37,9 +37,11 @@ def wgs_test(net: Network, on):
     m = net.data.n_testing
     d = net.data
     questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
-    ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
-    preds = d.upscale(net.predict(questions))
-    distance = haversine(ideps, preds)
+    ideps = {"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m]
+    usideps = d.upscale(ideps)
+    preds = net.predict(questions)
+    uspreds = d.upscale(preds)
+    distance = haversine(usideps, uspreds)
     return int(np.mean(distance))
 
 
