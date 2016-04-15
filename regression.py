@@ -23,7 +23,7 @@ crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epoch
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
 #   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 50
+runs = 1000
 no_plotpoints = 200
 no_plots = 2
 jobs = 2
