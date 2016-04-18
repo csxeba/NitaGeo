@@ -9,7 +9,6 @@ from csxnet.brainforge.Architecture.NNModel import Network
 from csxnet.brainforge.Utility.cost import *
 from csxnet.brainforge.Utility.activations import *
 
-
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
 burleypath = "burleynyers.csv"
@@ -18,12 +17,13 @@ fullpath = "fullnyers.csv"
 what = "burley"
 
 crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
+    0.3,      10,  1.0,  0.0,   (60, 60, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # fcv Hypers
+#   0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
 #   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 1000
+runs = 50
 no_plotpoints = 200
 no_plots = 2
 jobs = 2
@@ -76,7 +76,6 @@ def build_network(data):
 
 def run1(queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
     """One run corresponds to the training of a network with randomized weights"""
-    print("P{}  started!".format(ID))
     path = {"fcv": fcvpath, "bur": burleypath, "ful": fullpath}[what.lower()[:3]]
     myData = pull_data(path)
     network = build_network(myData)
@@ -93,7 +92,6 @@ def run1(queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
                 print(str(ID) + " / e: {}: T: {} L: {}".format(e, terr, lerr))
 
     output = (dynamics[0][-1], dynamics[1][-1]) if not return_dynamics else dynamics
-    print("P{} finished!".format(ID))
 
     if dump:
         dump_wgs_prediction(network, "testing", ID)
@@ -130,10 +128,12 @@ def logged_run():
     logchain = ""
     for r in range(1, runs+1):
         res = mp_run(jobs=jobs, return_dynamics=False, dump=True)
+        res = list(zip(*res))
         results[0].extend(res[0])
         results[1].extend(res[1])
-        logchain += "Acc @ {}: T: {}\tL: {}\n".format(r*jobs, int(np.mean(results[0])), int(np.mean(results[1])))
-        print("Done {} runs".format(r*jobs))
+        ch = "Acc@{}:\tT: {}\tL: {}\n".format(r*jobs, int(np.mean(results[0])), int(np.mean(results[1])))
+        logchain += ch
+        print(ch[:-1])
     tfin = np.mean(results[0]), np.std(results[0])
     lfin = np.mean(results[1]), np.std(results[1])
     print("----------\nExperiment ended.")
@@ -162,7 +162,7 @@ def plotted_run():
     for i in range(no_plots):
         axarr[i].plot(X, dynamics[i][0], "r", label="T")
         axarr[i].plot(X, dynamics[i][1], "b", label="L")
-        axarr[i].axis([0, X[-1], 0.0, 5000.0])
+        axarr[i].axis([0, X[-1], 0.0, 3000.0])
         axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
                           xycoords=('axes fraction', 'data'), textcoords='offset points')
         if i == 0:
