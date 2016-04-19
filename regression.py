@@ -17,7 +17,7 @@ fullpath = "fullnyers.csv"
 what = "burley"
 
 crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.3,      10,  1.0,  0.0,   (60, 60, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # fcv Hypers
+    0.3,      10,  1.0,  0.2,   (60, 60, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # fcv Hypers
 #   0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
@@ -59,8 +59,12 @@ def dump_wgs_prediction(net: Network, on, ID):
 def pull_data(filename):
     """Pulls the learning data from a csv file."""
     d = CData(dataroot + filename, cross_val=0, pca=0)
-    questions = d._datacopy[..., 2:]
-    targets = d._datacopy[..., :2]
+    questions = np.log(d.data[..., 2:])
+    targets = d.data[..., :2]
+    # questions = d.data[..., 2:]
+    # targets = d.data[..., :2]
+    # questions = np.concatenate((d.data[..., 2:], np.log(d.data[..., 2:])))
+    # targets = np.concatenate((d.data[..., :2], d.data[..., :2]))
     return RData((questions, targets), cross_val=crossvalrate, indeps_n=2, header=False, pca=pca)
 
 
@@ -174,5 +178,5 @@ def plotted_run():
 
 
 if __name__ == '__main__':
-    logged_run()
+    plotted_run()
     print("Fin")
