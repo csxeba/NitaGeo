@@ -4,10 +4,10 @@ import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 
-from csxnet.datamodel import CData, RData
-from csxnet.brainforge.Architecture.NNModel import Network
-from csxnet.brainforge.Utility.cost import *
-from csxnet.brainforge.Utility.activations import *
+from nnet.datamodel import CData, RData
+from nnet.brainforge.Architecture.NNModel import Network
+from nnet.brainforge.Utility.cost import *
+from nnet.brainforge.Utility.activations import *
 
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
