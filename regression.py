@@ -4,26 +4,26 @@ import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 
-from nnet.datamodel import CData, RData
-from nnet.brainforge.Architecture.NNModel import Network
-from nnet.brainforge.Utility.cost import *
-from nnet.brainforge.Utility.activations import *
+from csxnet.datamodel import CData, RData
+from csxnet.brainforge.Architecture.NNModel import Network
+from csxnet.brainforge.Utility.cost import *
+from csxnet.brainforge.Utility.activations import *
 
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
 burleypath = "burleynyers.csv"
 fullpath = "fullnyers.csv"
 
-what = "burley"
+what = "fcv"
 
 crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.3,      10,  1.0,  0.2,   (60, 60, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # fcv Hypers
+    0.0,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
 #   0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
 #   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
 #   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
 
-runs = 50
+runs = 10
 no_plotpoints = 200
 no_plots = 2
 jobs = 2
@@ -59,7 +59,7 @@ def dump_wgs_prediction(net: Network, on, ID):
 def pull_data(filename):
     """Pulls the learning data from a csv file."""
     d = CData(dataroot + filename, cross_val=0, pca=0)
-    questions = np.log(d.data[..., 2:])
+    questions = d.data[..., 2:] + 1e-8
     targets = d.data[..., :2]
     # questions = d.data[..., 2:]
     # targets = d.data[..., :2]
@@ -70,7 +70,7 @@ def pull_data(filename):
 
 def build_network(data):
     """Generates a neural network from given hyperparameters"""
-    net = Network(data=data, eta=eta, lmbd=lmbd, cost=cost)
+    net = Network(data=data, eta=eta, lmbd2=lmbd, lmbd1=0.0, mu=0.0, cost=cost)
     for hl in hiddens:
         net.add_fc(hl, activation=activationH)
 
@@ -154,6 +154,28 @@ def logged_run():
     logf.close()
 
 
+def get_models():
+    names = "Archimedes", "Avis", "Pallas"
+    myData = pull_data(fcvpath)
+    models = [Network(myData, eta, 0.0, lmbd, 0.0, cost) for _ in range(3)]
+    for no, net in enumerate(models):
+        net.name = names[no]
+        print("Building {}...".format(net.name))
+        for h in hiddens:
+            net.add_fc(h)
+        net.finalize_architecture()
+        print("Training {}...".format(net.name))
+        for e in range(1, epochs+1):
+            net.learn(batch_size)
+            if e % 1000 == 0:
+                print("{}' error @ epoch {}: {}".format(net.name, e, net.error))
+        print("-----------------------\nDone Training {}".format(net.name))
+        net.describe(1)
+        print("Dumping {}".format(net.name))
+        net.save("models/" + net.name + ".bro")
+        print("Saved!")
+
+
 def plotted_run():
     """This experimental setup plots the run dynamics of some epochs
 
@@ -166,7 +188,7 @@ def plotted_run():
     for i in range(no_plots):
         axarr[i].plot(X, dynamics[i][0], "r", label="T")
         axarr[i].plot(X, dynamics[i][1], "b", label="L")
-        axarr[i].axis([0, X[-1], 0.0, 3000.0])
+        axarr[i].axis([0, X[-1], 0.0, 5000.0])
         axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
                           xycoords=('axes fraction', 'data'), textcoords='offset points')
         if i == 0:
@@ -178,5 +200,5 @@ def plotted_run():
 
 
 if __name__ == '__main__':
-    plotted_run()
-    print("Fin")
+    get_models()
+    print("Fin!")
