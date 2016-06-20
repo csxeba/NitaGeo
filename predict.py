@@ -7,6 +7,7 @@ from csxnet.datamodel import RData
 from csxnet.brainforge.Architecture.NNModel import Network
 from csxnet.utilities import pull_table
 
+
 dataroot = "D:/Data/" if sys.platform == "win32" else "/data/Prog/data/"
 
 
