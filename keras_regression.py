@@ -21,7 +21,7 @@ network.add(Dense(30))
 network.add(Activation("tanh"))
 network.add(Dense(outshape))
 network.add(Activation("sigmoid"))
-network.compile("sgd", "mse")
+network.compile(optimizer="sgd", loss="mse")
 
 network.fit(tobacco.data, tobacco.indeps, batch_size=10, nb_epoch=1000, validation_split=0.3, verbose=0)
 network.predict(tobacco.testing)
