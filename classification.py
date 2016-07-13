@@ -27,7 +27,7 @@ batch_size = 10
 
 def pull_data(filename):
     d = CData(dataroot + filename, cross_val=0, pca=0)
-    questions = d._datacopy[..., 2:]
+    questions = d.data[..., 2:]
     targets = d.indeps
     return CData((questions, targets), cross_val=crossvalrate, pca=pca)
 
@@ -45,7 +45,7 @@ def dump_predictions(net: Network, on, ID):
 
 
 def build_network(data):
-    net = Network(data=data, eta=eta, lmbd=lmdb, cost=cost)
+    net = Network(data=data, eta=eta, lmbd1=0.0, lmbd2=lmdb, mu=0.0, cost=cost)
 
     for hl in hiddens:
         net.add_fc(hl, activation=Sigmoid)
