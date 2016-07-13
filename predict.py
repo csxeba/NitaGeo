@@ -41,6 +41,8 @@ def dump_wgs_prediction(net: Network, questions: np.ndarray, labels: np.ndarray=
     preds.tolist()
     preds = ["\t".join(pr.tolist()) for pr in preds]
     chain = "\n".join(preds)
+    chain = chain.replace(".", ",")
+    chain = "\t".join(["Azon", "Y", "X"]) + "\n" + chain
     with open("logs/" + net.name + "_predictions.csv", "w") as f:
         f.write(chain)
         f.close()
