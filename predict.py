@@ -37,6 +37,7 @@ def dump_wgs_prediction(net: Network, questions: np.ndarray, labels: np.ndarray=
     """Dumps the coordinate predictions into a text file"""
     questions = net.data.pca.transform(questions)
     preds = net.data.upscale(net.predict(questions)).astype(str)
+    labels = np.atleast_2d(labels).T
     preds = np.concatenate((labels, preds), axis=1)
     preds.tolist()
     preds = ["\t".join(pr.tolist()) for pr in preds]
@@ -58,7 +59,6 @@ csvroot = dataroot + "csvs/"
 models = wake(brainroot + archimedes), wake(brainroot + avis), wake(brainroot + pallas)
 # table, header, labels = get_data(csvroot + "unknown_tobacco01.csv")
 table, header, labels = get_data()
-labels = np.array(labels).reshape((88, 1))
 
 for model in models:
     dump_wgs_prediction(model, table, labels=labels)
