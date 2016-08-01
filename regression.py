@@ -1,5 +1,4 @@
 import time
-import sys
 import multiprocessing as mp
 
 import matplotlib.pyplot as plt
@@ -8,25 +7,18 @@ from csxnet.datamodel import CData, RData
 from csxnet.brainforge.Architecture.NNModel import Network
 from csxnet.brainforge.Utility.cost import *
 from csxnet.brainforge.Utility.activations import *
+from csxnet.utilities import roots
 
-dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
-fcvpath = "fcvnyers.csv"
-burleypath = "burleynyers.csv"
-fullpath = "fullnyers.csv"
+fullpath = roots["csvs"] + "fullnyers.csv"
 
-what = "fcv"
+fcvdataparam, fcvnetparam, fcvrunparam = (0.2, 10), (0.3, 0.0, (100, 30), Sigmoid, Sigmoid, MSE), \
+                                         (10, 2, 10000, 20)
+burleydataparam, burleynetparam, burleyrunparam = (0.2, 10), (0.3, 0.0, (30, 30), Sigmoid, Sigmoid, MSE), \
+                                                  (10, 2, 10000, 20)
+displayparams = 200, 2  # no_plotpoints, no_plots
 
-crossvalrate, pca, eta,  lmbd,  hiddens, activationO, activationH,   cost, epochs, batch_size = \
-    0.0,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
-#   0.2,      10,  3.0,  0.0,   (30, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # Burley Hypers
-#   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  10000,  20  # FCV Hypers, 1st best so far
-#   0.3,      10,  0.3,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,   5000,  20  # FCV Hypers, 2nd best so far
-#   0.2,      10,  0.2,  0.0,  (100, 30),  Sigmoid,     Sigmoid,     MSE,  20000,  20  # FCV Hypers, 3rd best so far
-
-runs = 10
-no_plotpoints = 200
-no_plots = 2
-jobs = 2
+# lrate, hid_neurons
+kerasparams = 0.3, (30,)
 
 
 def wgs_test(net: Network, on):
@@ -56,9 +48,10 @@ def dump_wgs_prediction(net: Network, on, ID):
     np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
 
 
-def pull_data(filename):
+def pull_data(dataparams):
     """Pulls the learning data from a csv file."""
-    d = CData(dataroot + filename, cross_val=0, pca=0)
+    crossvalrate, pca = dataparams
+    d = CData(fullpath, cross_val=crossvalrate, pca=pca, header=True, sep="\t", end="\n")
     questions = d.data[..., 2:] + 1e-8
     targets = d.data[..., :2]
     # questions = d.data[..., 2:]
@@ -68,137 +61,200 @@ def pull_data(filename):
     return RData((questions, targets), cross_val=crossvalrate, indeps_n=2, header=False, pca=pca)
 
 
-def build_network(data):
-    """Generates a neural network from given hyperparameters"""
-    net = Network(data=data, eta=eta, lmbd2=lmbd, lmbd1=0.0, mu=0.0, cost=cost)
-    for hl in hiddens:
-        net.add_fc(hl, activation=activationH)
+class CsxModel:
+    def __init__(self, dataparameters, netparameters, runparameters):
+        self.netparams = netparameters  # eta, lmbd, hiddens, activationO, activationH, cost
+        self.dataparams = dataparameters  # crossval, pca
+        self.runparams = runparameters  # runs, jobs, epochs, batch_size
 
-    net.finalize_architecture(activation=activationO)
-    return net
+    def build_network(self):
+        """Generates a neural network from given hyperparameters"""
+        eta, lmbd, hiddens, activationO, activationH, cost = self.netparams
+        network = Network(data=pull_data(self.dataparams),
+                          eta=eta, lmbd2=lmbd, lmbd1=0.0, mu=0.0, cost=cost)
+        for hl in hiddens:
+            network.add_fc(hl, activation=activationH)
+
+        network.finalize_architecture(activation=activationO)
+        return network
+
+    def mp_run(self, jobs=mp.cpu_count(), return_dynamics=False, dump=False, verbose=False):
+        """Organizes multiple runs in parallel"""
+        myQueue = mp.Queue()
+        procs = [mp.Process(target=self.run1, args=(myQueue, return_dynamics, dump, i, verbose),
+                            name="P{}".format(i)) for i in range(jobs)]
+        results = []
+        for proc in procs:
+            proc.start()
+        while len(results) != jobs:
+            results.append(myQueue.get())
+            time.sleep(0.33)
+        for proc in procs:
+            proc.join()
+
+        return results
+
+    def logged_run(self):
+        """This experimental setup logs the performance after several runs
+
+        Writes the mean and STD of the recorded accuracies to Rlog.txt"""
+
+        runs, no_plotpoints, no_plots, jobs, epochs, batch_size = self.runparams
+
+        start = time.time()
+        results = [list(), list()]
+        logchain = ""
+        for r in range(1, runs+1):
+            res = self.mp_run(jobs=jobs, return_dynamics=False, dump=True)
+            res = list(zip(*res))
+            results[0].extend(res[0])
+            results[1].extend(res[1])
+            ch = "Acc@{}:\tT: {}\tL: {}\n".format(r*jobs, int(np.mean(results[0])), int(np.mean(results[1])))
+            logchain += ch
+            print(ch[:-1])
+        tfin = np.mean(results[0]), np.std(results[0])
+        lfin = np.mean(results[1]), np.std(results[1])
+        print("----------\nExperiment ended.")
+        print("T: mean: {} STD: {}".format(*tfin))
+        print("L: mean: {} STD: {}".format(*lfin))
+        logchain += "---------------\nFinal Tests:\n"
+        logchain += "T: mean: {} STD: {}\n".format(*tfin)
+        logchain += "L: mean: {} STD: {}\n".format(*lfin)
+        logchain += "crossval\tpca\teta\tlmbd\thiddens\tactivationO\t" + \
+                    "activationH\tcost\truns\tjobs\tepochs\tbatch_size:\n"
+        logchain += ("\t".join(self.dataparams) + "\t" +
+                     "\t".join(self.netparams) + "\t" +
+                     "\t".join(self.runparams) + "\n")
+        logchain += "Run time: {}s\n".format(time.time()-start)
+        logf = open("logs/Rlog{}.txt".format(runs), "w")
+        logf.write(logchain)
+        logf.close()
+
+    def get_models(self):
+        eta, lmbd, hiddens, activationO, activationH, cost = self.netparams
+        runs, jobs, epochs, batch_size = self.runparams
+        pca = self.dataparams[1]
+
+        names = "Archimedes", "Avis", "Pallas"
+        myData = pull_data((0.0, pca))
+        models = [Network(myData, eta, 0.0, lmbd, 0.0, cost) for _ in range(3)]
+        for no, net in enumerate(models):
+            net.name = names[no]
+            print("Building {}...".format(net.name))
+            for h in hiddens:
+                net.add_fc(h)
+            net.finalize_architecture()
+            print("Training {}...".format(net.name))
+            for e in range(1, epochs+1):
+                net.learn(batch_size)
+                if e % 1000 == 0:
+                    print("{}' error @ epoch {}: {}".format(net.name, e, net.error))
+            print("-----------------------\nDone Training {}".format(net.name))
+            net.describe(1)
+            print("Dumping {}".format(net.name))
+            net.save("models/" + net.name + ".bro")
+            print("Saved!")
+
+    def plotted_run(self):
+        """This experimental setup plots the run dynamics of some epochs
+
+        The generated diagrams must be saved manually."""
+        no_plotpoints, no_plots = displayparams
+        runs, jobs, epochs, batch_size = self.runparams
+
+        X = np.arange(no_plotpoints) * (epochs // no_plotpoints)
+        f, axarr = plt.subplots(no_plots, sharex=True)
+
+        dynamics = self.mp_run(jobs=no_plots, return_dynamics=True, dump=True, verbose=True)
+
+        for i in range(no_plots):
+            axarr[i].plot(X, dynamics[i][0], "r", label="T")
+            axarr[i].plot(X, dynamics[i][1], "b", label="L")
+            axarr[i].axis([0, X[-1], 0.0, 5000.0])
+            axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
+                              xycoords=('axes fraction', 'data'), textcoords='offset points')
+            if i == 0:
+                # axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
+                #                   xycoords=('axes fraction', 'data'), textcoords='offset points')
+                axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                                ncol=2, mode="expand", borderaxespad=0.)
+        plt.show()
+
+    def run1(self, queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
+        """One run corresponds to the training of a network with randomized weights"""
+
+        network = self.build_network()
+
+        runs, no_plotpoints, no_plots, jobs, epochs, batch_size = self.runparams
+        dynamics = [list(), list()]
+
+        for e in range(1, epochs + 1):
+            network.learn(batch_size=batch_size)
+            if e % (epochs // no_plotpoints) == 0:
+                terr = wgs_test(network, "testing")
+                lerr = wgs_test(network, "learning")
+                dynamics[0].append(terr)
+                dynamics[1].append(lerr)
+                if e % ((epochs // no_plotpoints) * 10) == 0 and verbose:
+                    print(str(ID) + " / e: {}: T: {} L: {}".format(e, terr, lerr))
+
+        output = (dynamics[0][-1], dynamics[1][-1]) if not return_dynamics else dynamics
+
+        if dump:
+            dump_wgs_prediction(network, "testing", ID)
+
+        if queue:
+            queue.put(output)
+        else:
+            return output
 
 
-def run1(queue=None, return_dynamics=False, dump=False, ID=0, verbose=False):
-    """One run corresponds to the training of a network with randomized weights"""
-    path = {"fcv": fcvpath, "bur": burleypath, "ful": fullpath}[what.lower()[:3]]
-    myData = pull_data(path)
-    network = build_network(myData)
-    dynamics = [list(), list()]
+class KerasModel:
+    def __init__(self, params):
+        self.params = params  # lrate, hid_neurons
 
-    for e in range(1, epochs + 1):
-        network.learn(batch_size=batch_size)
-        if e % (epochs // no_plotpoints) == 0:
-            terr = wgs_test(network, "testing")
-            lerr = wgs_test(network, "learning")
-            dynamics[0].append(terr)
-            dynamics[1].append(lerr)
-            if e % ((epochs // no_plotpoints) * 10) == 0 and verbose:
-                print(str(ID) + " / e: {}: T: {} L: {}".format(e, terr, lerr))
+    def build_keras_network(self, fanin, fanout):
+        from keras.models import Sequential
+        from keras.layers.core import Dense, Dropout
+        from keras.optimizers import SGD
 
-    output = (dynamics[0][-1], dynamics[1][-1]) if not return_dynamics else dynamics
+        def add(h, input_dim=None):
+            if isinstance(h, str) and h[-1] == "d":
+                model.add(Dropout(0.5, output_dim=int(h[:-1]),
+                                  input_dim=input_dim, activation="tanh"))
+            elif isinstance(h, int):
+                model.add(Dense(h, input_dim=input_dim, activation="tanh"))
+            else:
+                print("Unsupported layer specification!")
 
-    if dump:
-        dump_wgs_prediction(network, "testing", ID)
+        lrate, hid_neurons = self.params
 
-    if queue:
-        queue.put(output)
-    else:
-        return output
+        model = Sequential()
+        add(hid_neurons[0], input_dim=fanin)
+        for neurons in hid_neurons[1:]:
+            add(neurons)
+        model.add(Dense(fanout, activation="sigmoid"))
+        model.compile(optimizer="adagrad", loss="mse")
 
+        return model
 
-def mp_run(jobs=mp.cpu_count(), return_dynamics=False, dump=False, verbose=False):
-    """Organizes multiple runs in parallel"""
-    myQueue = mp.Queue()
-    procs = [mp.Process(target=run1, args=(myQueue, return_dynamics, dump, i, verbose),
-                        name="P{}".format(i)) for i in range(jobs)]
-    results = []
-    for proc in procs:
-        proc.start()
-    while len(results) != jobs:
-        results.append(myQueue.get())
-        time.sleep(0.33)
-    for proc in procs:
-        proc.join()
+    @staticmethod
+    def pull_data():
+        data = pull_data((0.0, 0))
+        data.standardize()
+        fanin, fanout = data.neurons_required()
+        return data.learning, data.lindeps, fanin[0], fanout
 
-    return results
+    def run(self):
+        X, y, fanin, fanout = self.pull_data()
+        network = self.build_keras_network(fanin, fanout)
+        network.fit(X, y, 20, nb_epoch=1000, verbose=1, validation_split=0.2)
 
+        return network
 
-def logged_run():
-    """This experimental setup logs the performance after several runs
-
-    Writes the mean and STD of the recorded accuracies to Rlog.txt"""
-    start = time.time()
-    results = [list(), list()]
-    logchain = ""
-    for r in range(1, runs+1):
-        res = mp_run(jobs=jobs, return_dynamics=False, dump=True)
-        res = list(zip(*res))
-        results[0].extend(res[0])
-        results[1].extend(res[1])
-        ch = "Acc@{}:\tT: {}\tL: {}\n".format(r*jobs, int(np.mean(results[0])), int(np.mean(results[1])))
-        logchain += ch
-        print(ch[:-1])
-    tfin = np.mean(results[0]), np.std(results[0])
-    lfin = np.mean(results[1]), np.std(results[1])
-    print("----------\nExperiment ended.")
-    print("T: mean: {} STD: {}".format(*tfin))
-    print("L: mean: {} STD: {}".format(*lfin))
-    logchain += "---------------\nFinal Tests:\n"
-    logchain += "T: mean: {} STD: {}\n".format(*tfin)
-    logchain += "L: mean: {} STD: {}\n".format(*lfin)
-    logchain += "Hypers: crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size:\n"
-    logchain += str([crossvalrate, pca, eta, lmbd, hiddens, activationO, activationH, cost, epochs, batch_size]) + "\n"
-    logchain += "Run time: {}s\n".format(time.time()-start)
-    logf = open("logs/Rlog{}.txt".format(runs), "w")
-    logf.write(logchain)
-    logf.close()
-
-
-def get_models():
-    names = "Archimedes", "Avis", "Pallas"
-    myData = pull_data(fcvpath)
-    models = [Network(myData, eta, 0.0, lmbd, 0.0, cost) for _ in range(3)]
-    for no, net in enumerate(models):
-        net.name = names[no]
-        print("Building {}...".format(net.name))
-        for h in hiddens:
-            net.add_fc(h)
-        net.finalize_architecture()
-        print("Training {}...".format(net.name))
-        for e in range(1, epochs+1):
-            net.learn(batch_size)
-            if e % 1000 == 0:
-                print("{}' error @ epoch {}: {}".format(net.name, e, net.error))
-        print("-----------------------\nDone Training {}".format(net.name))
-        net.describe(1)
-        print("Dumping {}".format(net.name))
-        net.save("models/" + net.name + ".bro")
-        print("Saved!")
-
-
-def plotted_run():
-    """This experimental setup plots the run dynamics of some epochs
-
-    The generated diagrams must be saved manually."""
-    X = np.arange(no_plotpoints) * (epochs // no_plotpoints)
-    f, axarr = plt.subplots(no_plots, sharex=True)
-
-    dynamics = mp_run(jobs=no_plots, return_dynamics=True, dump=True, verbose=True)
-
-    for i in range(no_plots):
-        axarr[i].plot(X, dynamics[i][0], "r", label="T")
-        axarr[i].plot(X, dynamics[i][1], "b", label="L")
-        axarr[i].axis([0, X[-1], 0.0, 5000.0])
-        axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
-                          xycoords=('axes fraction', 'data'), textcoords='offset points')
-        if i == 0:
-            # axarr[i].annotate('%0.0f' % dynamics[i][0][-1], xy=(1, dynamics[i][0][-1]), xytext=(8, 0),
-            #                   xycoords=('axes fraction', 'data'), textcoords='offset points')
-            axarr[i].legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-                            ncol=2, mode="expand", borderaxespad=0.)
-    plt.show()
-
+    def __call__(self):
+        return self.run()
 
 if __name__ == '__main__':
-    get_models()
-    print("Fin!")
+    kmodel = KerasModel(kerasparams)
+    kmodel.run()
