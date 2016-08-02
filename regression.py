@@ -21,43 +21,12 @@ displayparams = 200, 2  # no_plotpoints, no_plots
 kerasparams = 0.3, (30,)
 
 
-def wgs_test(net: Network, on):
-    """Test the network's accuracy
-
-    by computing the haversine distance between the target and the predicted coordinates"""
-    from csxnet.nputils import haversine
-    m = net.data.n_testing
-    d = net.data
-    questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
-    ideps = {"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m]
-    usideps = d.upscale(ideps)
-    preds = net.predict(questions)
-    uspreds = d.upscale(preds)
-    distance = haversine(usideps, uspreds)
-    return int(np.mean(distance))
-
-
-def dump_wgs_prediction(net: Network, on, ID):
-    """Dumps the coordinate predictions into a text file"""
-    m = net.data.n_testing
-    d = net.data
-    questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
-    ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
-    preds = d.upscale(net.predict(questions))
-    np.savetxt("logs/R" + str(ID) + on + '_ideps.txt', ideps, delimiter="\t")
-    np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
-
-
 def pull_data(dataparams):
     """Pulls the learning data from a csv file."""
     crossvalrate, pca = dataparams
     d = CData(fullpath, cross_val=crossvalrate, pca=pca, header=True, sep="\t", end="\n")
     questions = d.data[..., 2:] + 1e-8
     targets = d.data[..., :2]
-    # questions = d.data[..., 2:]
-    # targets = d.data[..., :2]
-    # questions = np.concatenate((d.data[..., 2:], np.log(d.data[..., 2:])))
-    # targets = np.concatenate((d.data[..., :2], d.data[..., :2]))
     return RData((questions, targets), cross_val=crossvalrate, indeps_n=2, header=False, pca=pca)
 
 
@@ -191,8 +160,8 @@ class CsxModel:
         for e in range(1, epochs + 1):
             network.learn(batch_size=batch_size)
             if e % (epochs // no_plotpoints) == 0:
-                terr = wgs_test(network, "testing")
-                lerr = wgs_test(network, "learning")
+                terr = self.wgs_test(network, "testing")
+                lerr = self.wgs_test(network, "learning")
                 dynamics[0].append(terr)
                 dynamics[1].append(lerr)
                 if e % ((epochs // no_plotpoints) * 10) == 0 and verbose:
@@ -201,49 +170,79 @@ class CsxModel:
         output = (dynamics[0][-1], dynamics[1][-1]) if not return_dynamics else dynamics
 
         if dump:
-            dump_wgs_prediction(network, "testing", ID)
+            self.dump_wgs_prediction(network, "testing", ID)
 
         if queue:
             queue.put(output)
         else:
             return output
 
+    @staticmethod
+    def wgs_test(network, on):
+        """Test the network's accuracy
+
+        by computing the haversine distance between the target and the predicted coordinates"""
+        from csxnet.nputils import haversine
+        m = network.data.n_testing
+        d = network.data
+        questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
+        ideps = {"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m]
+        usideps = d.upscale(ideps)
+        preds = network.predict(questions)
+        uspreds = d.upscale(preds)
+        distance = haversine(usideps, uspreds)
+        return int(np.mean(distance))
+
+    @staticmethod
+    def dump_wgs_prediction(network: Network, on, ID):
+        """Dumps the coordinate predictions into a text file"""
+        m = network.data.n_testing
+        d = network.data
+        questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
+        ideps = d.upscale({"d": d.indeps, "l": d.lindeps, "t": d.tindeps}[on[0]][:m])
+        preds = d.upscale(network.predict(questions))
+        np.savetxt("logs/R" + str(ID) + on + '_ideps.txt', ideps, delimiter="\t")
+        np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
+
 
 class KerasModel:
     def __init__(self, params):
         self.params = params  # lrate, hid_neurons
+        self.dataframe = None
 
     def build_keras_network(self, fanin, fanout):
         from keras.models import Sequential
         from keras.layers.core import Dense, Dropout
-        from keras.optimizers import SGD
+        from keras.optimizers import Adagrad
 
-        def add(h, input_dim=None):
+        def add(h, input_dim=None, activation="tanh"):
             if isinstance(h, str) and h[-1] == "d":
                 model.add(Dropout(0.5, output_dim=int(h[:-1]),
-                                  input_dim=input_dim, activation="tanh"))
+                                  input_dim=input_dim, activation=activation))
             elif isinstance(h, int):
-                model.add(Dense(h, input_dim=input_dim, activation="tanh"))
+                model.add(Dense(h, input_dim=input_dim, activation=activation))
             else:
                 print("Unsupported layer specification!")
 
+        def construct_model():
+            model = Sequential()
+            add(hid_neurons[0], input_dim=fanin)
+            if len(hid_neurons) > 1:
+                for neurons in hid_neurons[1:]:
+                    add(neurons)
+            add(fanout, activation="sigmoid")
+            model.compile(optimizer=Adagrad(), loss="mse")
+            return model
+
         lrate, hid_neurons = self.params
+        network = construct_model()
+        return network
 
-        model = Sequential()
-        add(hid_neurons[0], input_dim=fanin)
-        for neurons in hid_neurons[1:]:
-            add(neurons)
-        model.add(Dense(fanout, activation="sigmoid"))
-        model.compile(optimizer="adagrad", loss="mse")
-
-        return model
-
-    @staticmethod
-    def pull_data():
-        data = pull_data((0.0, 0))
-        data.standardize()
-        fanin, fanout = data.neurons_required()
-        return data.learning, data.lindeps, fanin[0], fanout
+    def pull_data(self):
+        self.dataframe = pull_data((0.2, 0))
+        self.dataframe.standardize()
+        fanin, fanout = self.dataframe.neurons_required()
+        return self.dataframe.learning, self.dataframe.lindeps, fanin[0], fanout
 
     def run(self):
         X, y, fanin, fanout = self.pull_data()
@@ -252,8 +251,13 @@ class KerasModel:
 
         return network
 
+    def wgs_test(self, network, testtable):
+        X, y = testtable
+        network.predict()
+
     def __call__(self):
         return self.run()
+
 
 if __name__ == '__main__':
     kmodel = KerasModel(kerasparams)
