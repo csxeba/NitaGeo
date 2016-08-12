@@ -3,11 +3,11 @@ import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 
-from csxnet.datamodel import CData, RData
-from csxnet.brainforge.Architecture.NNModel import Network
-from csxnet.brainforge.Utility.cost import *
-from csxnet.brainforge.Utility.activations import *
-from csxnet.utilities import roots
+from csxdata.frames import CData, RData
+from csxnet.model import Network
+from csxnet.brainforge.cost import *
+from csxnet.brainforge.activations import *
+from csxdata.utilities.const import roots
 
 fullpath = roots["csvs"] + "fullnyers.csv"
 
@@ -182,7 +182,7 @@ class CsxModel:
         """Test the network's accuracy
 
         by computing the haversine distance between the target and the predicted coordinates"""
-        from csxnet.nputils import haversine
+        from csxdata.utilities.nputils import haversine
         m = network.data.n_testing
         d = network.data
         questions = {"d": d.data, "l": d.learning, "t": d.testing}[on[0]][:m]
@@ -217,10 +217,10 @@ class KerasModel:
 
         def add(h, input_dim=None, activation="tanh"):
             if isinstance(h, str) and h[-1] == "d":
-                model.add(Dropout(0.5, output_dim=int(h[:-1]),
+                network.add(Dropout(0.5, output_dim=int(h[:-1]),
                                   input_dim=input_dim, activation=activation))
             elif isinstance(h, int):
-                model.add(Dense(h, input_dim=input_dim, activation=activation))
+                network.add(Dense(h, input_dim=input_dim, activation=activation))
             else:
                 print("Unsupported layer specification!")
 
@@ -240,7 +240,7 @@ class KerasModel:
 
     def pull_data(self):
         self.dataframe = pull_data((0.2, 0))
-        self.dataframe.standardize()
+        self.dataframe.self_standardize()
         fanin, fanout = self.dataframe.neurons_required()
         return self.dataframe.learning, self.dataframe.lindeps, fanin[0], fanout
 
@@ -253,7 +253,7 @@ class KerasModel:
 
     def wgs_test(self, network, testtable):
         X, y = testtable
-        network.predict()
+        network.predict(X, y, )
 
     def __call__(self):
         return self.run()

@@ -2,7 +2,7 @@ import numpy as np
 
 
 def test_featscale():
-    from csxnet.nputils import featscale
+    from csxdata.utilities.nputils import featscale
 
     ar = np.array([np.random.uniform(12, 21) for _ in range(1000)]).reshape(250, 4)
     fsar, feats = featscale(ar, 0.1, 0.9, 0, 1)

@@ -3,9 +3,10 @@ import pickle
 
 import numpy as np
 
-from csxnet.datamodel import RData
-from csxnet.brainforge.Architecture.NNModel import Network
-from csxnet.utilities import pull_table
+# noinspection PyUnresolvedReferences
+from csxdata.frames import RData
+from csxnet.model import Network
+from csxdata.utilities.parsers import parse_csv
 
 
 dataroot = "D:/Data/" if sys.platform == "win32" else "/data/Prog/data/"
@@ -30,7 +31,7 @@ def get_data(path=None):
                                     initialdir=csvroot)
         tk.destroy()
 
-    return pull_table(path, header=True, labels=True)
+    return parse_csv(path, header=True, indeps_n=True, sep="\t", end="\n")
 
 
 def dump_wgs_prediction(net: Network, questions: np.ndarray, labels: np.ndarray=None):

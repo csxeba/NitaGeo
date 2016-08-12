@@ -1,10 +1,10 @@
 import sys
 import time
 
-from csxnet.datamodel import CData
-from csxnet.brainforge.Architecture.NNModel import Network
-from csxnet.brainforge.Utility.cost import *
-from csxnet.brainforge.Utility.activations import *
+from csxdata.frames import CData
+from csxnet.model import Network
+from csxnet.brainforge.cost import *
+from csxnet.brainforge.activations import *
 
 dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
 fcvpath = "fcvnyers.csv"
@@ -26,7 +26,7 @@ batch_size = 10
 
 
 def pull_data(filename):
-    d = CData(dataroot + filename, cross_val=0, pca=0)
+    d = CData(dataroot + filename, cross_val=0.0)
     questions = d.data[..., 2:]
     targets = d.indeps
     return CData((questions, targets), cross_val=crossvalrate, pca=pca)
@@ -64,7 +64,6 @@ if __name__ == '__main__':
 
     for r in range(1, runs+1):
         network = build_network(myData)
-        myData.split_data()
         for epoch in range(epochs):
             network.learn(batch_size=batch_size)
             if r <= 3:

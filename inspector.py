@@ -3,7 +3,7 @@ import pickle
 
 import numpy as np
 
-from csxnet.brainforge.Architecture.NNModel import Network
+from csxnet.model import Network
 
 dataroot = "D:/Data/" if sys.platform == "win32" else "/data/Prog/data/"
 

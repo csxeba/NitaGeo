@@ -5,8 +5,8 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers.core import Dense
 
-from csxnet.datamodel import CData
-from csxnet.nputils import avgpool as pool
+from csxdata.frames import CData
+from csxdata.utilities.nputils import avgpool as pool
 
 dataroot = "D:/Data/" if sys.platform == "win32" else "/data/Prog/data/"
 datapath = dataroot + "raw/nir/ntab.txt"
@@ -17,7 +17,7 @@ def pull_data(path, avgpool=0, avg_replications=True, standardize=True):
     if avg_replications:
         myData.average_replications()
     if standardize:
-        myData.standardize()
+        myData.self_standardize()
     data = np.zeros((myData.data.shape[0], (myData.data.shape[1] // avgpool) - 2))
     for i, line in enumerate(myData.data):
         data[i] = pool(line, e=avgpool)
