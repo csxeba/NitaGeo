@@ -3,13 +3,11 @@ import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 
-from csxdata.frames import CData, RData
 from csxnet.model import Network
 from csxnet.brainforge.cost import *
 from csxnet.brainforge.activations import *
-from csxdata.utilities.const import roots
 
-fullpath = roots["csvs"] + "fullnyers.csv"
+from generic import pull_data
 
 fcvdataparam, fcvnetparam, fcvrunparam = (0.2, 10), (0.3, 0.0, (100, 30), Sigmoid, Sigmoid, MSE), \
                                          (10, 2, 10000, 20)
@@ -19,15 +17,6 @@ displayparams = 200, 2  # no_plotpoints, no_plots
 
 # lrate, hid_neurons
 kerasparams = 0.3, (30,)
-
-
-def pull_data(dataparams):
-    """Pulls the learning data from a csv file."""
-    crossvalrate, pca = dataparams
-    d = CData(fullpath, cross_val=crossvalrate, pca=pca, header=True, sep="\t", end="\n")
-    questions = d.data[..., 2:] + 1e-8
-    targets = d.data[..., :2]
-    return RData((questions, targets), cross_val=crossvalrate, indeps_n=2, header=False, pca=pca)
 
 
 class CsxModel:
@@ -203,62 +192,3 @@ class CsxModel:
         preds = d.upscale(network.predict(questions))
         np.savetxt("logs/R" + str(ID) + on + '_ideps.txt', ideps, delimiter="\t")
         np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
-
-
-class KerasModel:
-    def __init__(self, params):
-        self.params = params  # lrate, hid_neurons
-        self.dataframe = None
-
-    def build_keras_network(self, fanin, fanout):
-        from keras.models import Sequential
-        from keras.layers.core import Dense, Dropout
-        from keras.optimizers import Adagrad
-
-        def add(h, input_dim=None, activation="tanh"):
-            if isinstance(h, str) and h[-1] == "d":
-                network.add(Dropout(0.5, output_dim=int(h[:-1]),
-                                  input_dim=input_dim, activation=activation))
-            elif isinstance(h, int):
-                network.add(Dense(h, input_dim=input_dim, activation=activation))
-            else:
-                print("Unsupported layer specification!")
-
-        def construct_model():
-            model = Sequential()
-            add(hid_neurons[0], input_dim=fanin)
-            if len(hid_neurons) > 1:
-                for neurons in hid_neurons[1:]:
-                    add(neurons)
-            add(fanout, activation="sigmoid")
-            model.compile(optimizer=Adagrad(), loss="mse")
-            return model
-
-        lrate, hid_neurons = self.params
-        network = construct_model()
-        return network
-
-    def pull_data(self):
-        self.dataframe = pull_data((0.2, 0))
-        self.dataframe.self_standardize()
-        fanin, fanout = self.dataframe.neurons_required()
-        return self.dataframe.learning, self.dataframe.lindeps, fanin[0], fanout
-
-    def run(self):
-        X, y, fanin, fanout = self.pull_data()
-        network = self.build_keras_network(fanin, fanout)
-        network.fit(X, y, 20, nb_epoch=1000, verbose=1, validation_split=0.2)
-
-        return network
-
-    def wgs_test(self, network, testtable):
-        X, y = testtable
-        network.predict(X, y, )
-
-    def __call__(self):
-        return self.run()
-
-
-if __name__ == '__main__':
-    kmodel = KerasModel(kerasparams)
-    kmodel.run()
