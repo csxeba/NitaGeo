@@ -3,53 +3,61 @@ import time
 import numpy as np
 
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout
+from keras.layers.core import Dense, Dropout, Highway
 
 from generic import pull_new_data
 
+from csxdata.utilities.high_utils import th_haversine
 
 # Model parameters:
-OPTIMIZER = "adagrad"
-ACTIVATION = "relu"
+OPTIMIZER = "rmsprop"
+ACTIVATION = "tanh"
 O_ACTIVATION = "sigmoid"
-HIDDENS = (30,)
+HIDDENS = ["300d", "180d", "120d", 60, 30]
+HIGHWAY = False
 EPOCHS = 100
 BSIZE = 10
 VAL_RATE = 0.3
 DROP_RATE = 0.5
 PCA = 0
 L1 = 0.0
-L2 = 0.0
+L2 = 0.01
 
 
 class KerasModel:
     def __init__(self, name=""):
+
         def parse_data():
             dframe = pull_new_data(crossval_rate=VAL_RATE, pca=PCA)
             if not PCA:
-                dframe.self_standardize()
+                dframe.transformation = "std"
             neurons_in, neurons_out = dframe.neurons_required
             return dframe, neurons_in, neurons_out
 
         def build_keras_network(neurons_in, neurons_out):
+
             def add(network, h, input_dim=None, activation=ACTIVATION):
                 drop = False
-                if isinstance(h, str) and h[-1] == "d":
-                    h = int(h[:-1])
-                    drop = True
+                if isinstance(h, str):
+                    if h[-1] == "d":
+                        h = int(h[:-1])
+                        drop = True
                 network.add(Dense(h, input_dim=input_dim, activation=activation))
                 if drop:
                     network.add(Dropout(p=DROP_RATE))
+                if HIGHWAY:
+                    network.add(Highway())
+
+            def define_model():
+                add(model, HIDDENS[0], input_dim=neurons_in)
+                if len(HIDDENS) > 1:
+                    for neurons in HIDDENS[1:]:
+                        add(model, neurons)
+                add(model, neurons_out, activation="sigmoid")
 
             model = Sequential()
-
-            add(model, HIDDENS[0], input_dim=neurons_in)
-            if len(HIDDENS) > 1:
-                for neurons in HIDDENS[1:]:
-                    add(model, neurons)
-            add(model, neurons_out, activation="sigmoid")
-
-            model.compile(optimizer=OPTIMIZER, loss="mse")
+            define_model()
+            model.compile(optimizer=OPTIMIZER, loss=th_haversine())
             return model
 
         self.dataframe, fanin, outshape = parse_data()
@@ -69,7 +77,7 @@ class KerasModel:
 
     def run_century(self):
         learning_table = self.dataframe.table("learning")
-        print("Initial error @\t0:\t\tL: {}\tT: {}".format(self.wgs_test("learning"), self.wgs_test("testing")))
+        print("Initial error @\t0:\tL: {}\tT: {}".format(self.wgs_test("learning"), self.wgs_test("testing")))
         runstart = time.time()
 
         lacc, tacc = [], []

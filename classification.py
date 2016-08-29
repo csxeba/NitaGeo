@@ -1,14 +1,15 @@
-import sys
 import time
 
-from csxdata.frames import CData
-from csxnet.model import Network
-from csxnet.brainforge.cost import *
-from csxnet.brainforge.activations import *
+import numpy as np
 
-dataroot = "D:/Data/csvs/" if sys.platform.lower() == "win32" else "/data/Prog/data/csvs/"
-fcvpath = "fcvnyers.csv"
-burleypath = "burleynyers.csv"
+from csxdata import CData, roots
+from csxnet.model import Network
+from csxnet.brainforge import costs
+from csxnet.brainforge import activations
+
+dataroot = roots["data"]
+fcvpath = roots["csvs"] + "fcvnyers.csv"
+burleypath = roots["csvs"] + "burleynyers.csv"
 
 what = "burley"
 
@@ -18,7 +19,7 @@ pca = 11  # full = 13
 eta = 1.5
 lmdb = 0.0
 hiddens = (100, 60)
-cost = MSE
+cost = costs.mse
 
 runs = 1000
 epochs = 300
@@ -48,9 +49,9 @@ def build_network(data):
     net = Network(data=data, eta=eta, lmbd1=0.0, lmbd2=lmdb, mu=0.0, cost=cost)
 
     for hl in hiddens:
-        net.add_fc(hl, activation=Sigmoid)
+        net.add_fc(hl, activation=activations.sigmoid)
 
-    net.finalize_architecture(activation=Sigmoid)
+    net.finalize_architecture(activation=activations.sigmoid)
 
     return net
 

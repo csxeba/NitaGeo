@@ -17,7 +17,7 @@ def pull_data(path, avgpool=0, avg_replications=True, standardize=True):
     if avg_replications:
         myData.average_replications()
     if standardize:
-        myData.self_standardize()
+        myData.transformation = "std"
     data = np.zeros((myData.data.shape[0], (myData.data.shape[1] // avgpool) - 2))
     for i, line in enumerate(myData.data):
         data[i] = pool(line, e=avgpool)

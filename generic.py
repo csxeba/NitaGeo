@@ -1,9 +1,3 @@
-# Declarations
-
-# TBD
-# Assemble factual data here!
-
-
 def pull_old_data(crossval_rate, pca, path=None):
     """Pulls the learning data from a csv file."""
     from csxdata.frames import CData, RData
@@ -22,5 +16,5 @@ def pull_new_data(crossval_rate, pca, path=None):
     if path is None:
         from csxdata.const import roots
         path = roots["csvs"] + "sum_ntab.csv"
-    X, _, header = parse_csv(path, header=1, indeps_n=4, sep="\t", end="\n")
-    return RData((X[..., 2:], X[..., :2]), crossval_rate, indeps_n=0, header=0)
+    X, _, header = parse_csv(path, headers=1, indeps=4, sep="\t", end="\n")
+    return RData((X[..., 2:], X[..., :2]), crossval_rate, indeps_n=0, header=0, pca=pca)

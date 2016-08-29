@@ -31,15 +31,15 @@ def get_data(path=None):
                                     initialdir=csvroot)
         tk.destroy()
 
-    return parse_csv(path, header=True, indeps_n=True, sep="\t", end="\n")
+    return parse_csv(path, headers=1, indeps=1, sep="\t", end="\n")
 
 
-def dump_wgs_prediction(net: Network, questions: np.ndarray, labels: np.ndarray=None):
+def dump_wgs_prediction(net: Network, questions: np.ndarray, lbls: np.ndarray=None):
     """Dumps the coordinate predictions into a text file"""
     questions = net.data.pca.transform(questions)
     preds = net.data.upscale(net.predict(questions)).astype(str)
-    labels = np.atleast_2d(labels).T
-    preds = np.concatenate((labels, preds), axis=1)
+    lbls = np.atleast_2d(lbls).T
+    preds = np.concatenate((lbls, preds), axis=1)
     preds.tolist()
     preds = ["\t".join(pr.tolist()) for pr in preds]
     chain = "\n".join(preds)
@@ -62,6 +62,6 @@ models = wake(brainroot + archimedes), wake(brainroot + avis), wake(brainroot + 
 table, header, labels = get_data()
 
 for model in models:
-    dump_wgs_prediction(model, table, labels=labels)
+    dump_wgs_prediction(model, table, lbls=labels)
 
 print("Fin!")

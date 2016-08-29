@@ -2,21 +2,21 @@ import time
 import multiprocessing as mp
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from csxnet.model import Network
-from csxnet.brainforge.cost import *
-from csxnet.brainforge.activations import *
+from csxnet.brainforge import costs
+from csxnet.brainforge import activations
 
-from generic import pull_data
+from generic import pull_old_data as pull_data
 
-fcvdataparam, fcvnetparam, fcvrunparam = (0.2, 10), (0.3, 0.0, (100, 30), Sigmoid, Sigmoid, MSE), \
+fcvdataparam, fcvnetparam, fcvrunparam = (0.2, 10), (0.3, 0.0, (100, 30),
+                                                     activations.sigmoid, activations.sigmoid, costs.mse), \
                                          (10, 2, 10000, 20)
-burleydataparam, burleynetparam, burleyrunparam = (0.2, 10), (0.3, 0.0, (30, 30), Sigmoid, Sigmoid, MSE), \
+burleydataparam, burleynetparam, burleyrunparam = (0.2, 10), (0.3, 0.0, (30, 30),
+                                                              activations.sigmoid, activations.sigmoid, costs.mse), \
                                                   (10, 2, 10000, 20)
 displayparams = 200, 2  # no_plotpoints, no_plots
-
-# lrate, hid_neurons
-kerasparams = 0.3, (30,)
 
 
 class CsxModel:
@@ -28,7 +28,7 @@ class CsxModel:
     def build_network(self):
         """Generates a neural network from given hyperparameters"""
         eta, lmbd, hiddens, activationO, activationH, cost = self.netparams
-        network = Network(data=pull_data(self.dataparams),
+        network = Network(data=pull_data(*self.dataparams),
                           eta=eta, lmbd2=lmbd, lmbd1=0.0, mu=0.0, cost=cost)
         for hl in hiddens:
             network.add_fc(hl, activation=activationH)
@@ -94,7 +94,7 @@ class CsxModel:
         pca = self.dataparams[1]
 
         names = "Archimedes", "Avis", "Pallas"
-        myData = pull_data((0.0, pca))
+        myData = pull_data(0.0, pca)
         models = [Network(myData, eta, 0.0, lmbd, 0.0, cost) for _ in range(3)]
         for no, net in enumerate(models):
             net.name = names[no]
@@ -192,3 +192,7 @@ class CsxModel:
         preds = d.upscale(network.predict(questions))
         np.savetxt("logs/R" + str(ID) + on + '_ideps.txt', ideps, delimiter="\t")
         np.savetxt("logs/R" + str(ID) + on + '_preds.txt', preds, delimiter="\t")
+
+if __name__ == '__main__':
+    model = CsxModel(fcvdataparam, fcvnetparam, fcvrunparam)
+    model.run1()
