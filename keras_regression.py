@@ -57,7 +57,7 @@ class KerasModel:
 
             model = Sequential()
             define_model()
-            model.compile(optimizer=OPTIMIZER, loss=th_haversine())
+            model.compile(optimizer=OPTIMIZER, loss="mse")
             return model
 
         self.dataframe, fanin, outshape = parse_data()
