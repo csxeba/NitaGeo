@@ -7,7 +7,6 @@ from csxnet.model import Network
 from csxnet.brainforge import costs
 from csxnet.brainforge import activations
 
-dataroot = roots["data"]
 fcvpath = roots["csvs"] + "fcvnyers.csv"
 burleypath = roots["csvs"] + "burleynyers.csv"
 
@@ -27,7 +26,7 @@ batch_size = 10
 
 
 def pull_data(filename):
-    d = CData(dataroot + filename, cross_val=0.0)
+    d = CData(filename, cross_val=0.0)
     questions = d.data[..., 2:]
     targets = d.indeps
     return CData((questions, targets), cross_val=crossvalrate, pca=pca)
