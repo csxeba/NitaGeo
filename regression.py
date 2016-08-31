@@ -18,6 +18,8 @@ burleydataparam, burleynetparam, burleyrunparam = (0.2, 10), (0.3, 0.0, (30, 30)
                                                   (10, 2, 10000, 20)
 displayparams = 200, 2  # no_plotpoints, no_plots
 
+millenia = 10
+
 
 class CsxModel:
     def __init__(self, dataparameters, netparameters, runparameters):
@@ -103,10 +105,9 @@ class CsxModel:
                 net.add_fc(h)
             net.finalize_architecture()
             print("Training {}...".format(net.name))
-            for e in range(1, epochs+1):
-                net.learn(batch_size)
-                if e % 1000 == 0:
-                    print("{}' error @ epoch {}: {}".format(net.name, e, net.error))
+            for millenium in range(1, millenia+1):
+                net.fit(batch_size, epochs=epochs // 1000, verbose=0)
+                print("{} cost @ epoch {}: {}".format(net.name, millenium * 1000, net.evaluate(accuracy=False)))
             print("-----------------------\nDone Training {}".format(net.name))
             net.describe(1)
             print("Dumping {}".format(net.name))
