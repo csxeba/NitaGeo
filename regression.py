@@ -4,9 +4,9 @@ import multiprocessing as mp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from csxnet.model import Network
-from csxnet.brainforge import costs
-from csxnet.brainforge import activations
+from csxnet import Network
+from csxnet.util import cost_fns as costs
+from csxnet.util import act_fns as activations
 
 from generic import pull_old_data as pull_data
 
@@ -148,7 +148,7 @@ class CsxModel:
         dynamics = [list(), list()]
 
         for e in range(1, epochs + 1):
-            network.learn(batch_size=batch_size)
+            network._epoch(batch_size=batch_size)
             if e % (epochs // no_plotpoints) == 0:
                 terr = self.wgs_test(network, "testing")
                 lerr = self.wgs_test(network, "learning")
